@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Konverter Proyeksi Peta</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light dark;--bg:#f4f6f9;--card:#fff;--tx:#1b2430;--mut:#667085;--ac:#1d6fd6;--bd:#d6dce4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10151c;--card:#19212b;--tx:#e8edf3;--mut:#93a0b0;--ac:#5aa2ff;--bd:#2c3745}}
+:root[data-theme="dark"]{--bg:#10151c;--card:#19212b;--tx:#e8edf3;--mut:#93a0b0;--ac:#5aa2ff;--bd:#2c3745}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background-color:var(--bg)}
+main{max-width:980px;margin:0 auto;padding:14px}
+h1{font-size:20px;margin:4px 0}p.s{color:var(--mut);margin:0 0 12px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}
+.c h2{font-size:15px;margin:0 0 8px}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 2px}
+select,input[type=number]{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+.r{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{padding:10px 14px;border:0;border-radius:8px;background:var(--ac);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+button.o{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+.b{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;align-items:center}
+.cv{overflow-x:auto;text-align:center}canvas{max-width:100%;height:auto;border-radius:8px;background:repeating-conic-gradient(#8883 0 25%,transparent 0 50%) 0/16px 16px}
+small{color:var(--mut)}
+</style></head><body><main>
+<h1>Konverter Proyeksi Peta</h1>
+<p class="s">Unggah gambar peta Anda (proyeksi apa pun), tentukan proyeksi &amp; cakupannya, lalu ubah ke proyeksi lain. Semua diproses di perangkat Anda.</p>
+<div class="b"><input type="file" id="f" accept="image/png,image/jpeg,image/webp,image/gif,image/*"><small>atau tempel (paste) / seret gambar ke halaman</small><button class="o" id="demo">Pakai gambar contoh</button></div>
+<div class="g">
+<div class="c"><h2>1. Peta sumber</h2>
+<label>Proyeksi sumber</label><select id="sp"></select>
+<div class="r"><div><label>Meridian pusat λ₀ (°)</label><input type="number" id="sl" value="0" step="any"></div>
+<div><label>Lintang pusat φ₀ (°) – azimutal</label><input type="number" id="sq" value="0" step="any"></div></div>
+<label>Cakupan gambar (derajat)</label>
+<div class="r"><input type="number" id="sW" value="-180" step="any" title="Barat"><input type="number" id="sE" value="180" step="any" title="Timur">
+<input type="number" id="sS" value="-90" step="any" title="Selatan"><input type="number" id="sN" value="90" step="any" title="Utara"></div>
+<small>Urutan: Barat, Timur, Selatan, Utara. Harus sama persis dengan tepi peta kustom Anda (mis. Indonesia: 95, 141, -11, 6), kalau tidak hasil akan melenceng.</small></div>
+<div class="c"><h2>2. Proyeksi tujuan</h2>
+<label>Proyeksi tujuan</label><select id="tp"></select>
+<div class="r"><div><label>Meridian pusat λ₀ (°)</label><input type="number" id="tl" value="0" step="any"></div>
+<div><label>Lintang pusat φ₀ (°) – azimutal</label><input type="number" id="tq" value="0" step="any"></div></div>
+<label>Lebar hasil (px)</label><input type="number" id="ow" value="1000" min="200" max="2000">
+<label><input type="checkbox" id="gr" checked> Tampilkan grid</label>
+<div class="r"><div><label>Warna grid</label><input type="color" id="gc" value="#000000" style="width:100%;height:38px;border:1px solid var(--bd);border-radius:8px;background:var(--bg)"></div>
+<div><label>Jarak grid</label><select id="gs"><option value="10">10°</option><option value="15">15°</option><option value="30" selected>30°</option><option value="45">45°</option></select></div></div></div>
+</div>
+<div class="b"><button id="go">Konversi</button><button class="o" id="dl">Unduh PNG</button><small id="st">Pilih gambar atau pakai gambar contoh.</small></div>
+<div class="c cv"><canvas id="cv" width="10" height="10"></canvas><br><small>Jika tombol Unduh tidak bekerja, tekan lama / klik kanan pada gambar hasil.</small><br><img id="im" alt="" style="display:none;max-width:100%;margin-top:8px;border-radius:8px"></div>
+</main>
+<script>
+const PI=Math.PI,D=PI/180,$=id=>document.getElementById(id);
+const wrap=a=>{while(a>PI)a-=2*PI;while(a<-PI)a+=2*PI;return a};
+const w360=d=>((d%360)+360)%360,cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+function az(kf,cf,maxr,vis){return{f(l,p,p0){const cc=Math.sin(p0)*Math.sin(p)+Math.cos(p0)*Math.cos(p)*Math.cos(l);if(!vis(cc))return null;const k=kf(cc);return[k*Math.cos(p)*Math.sin(l),k*(Math.cos(p0)*Math.sin(p)-Math.sin(p0)*Math.cos(p)*Math.cos(l))]},
+i(x,y,p0){const r=Math.hypot(x,y);if(r>maxr)return null;const c=cf(r);if(c==null)return null;if(r<1e-12)return[0,p0];const s=Math.sin(c),k=Math.cos(c);return[Math.atan2(x*s,r*Math.cos(p0)*k-y*Math.sin(p0)*s),Math.asin(cl(k*Math.sin(p0)+y*s*Math.cos(p0)/r,-1,1))]}}}
+const A1=1.340264,A2=-0.081106,A3=0.000893,A4=0.003796,S2=Math.SQRT2;
+const PR={
+eq:{n:"Equirectangular (Plate Carrée)",f:(l,p)=>[l,p],i:(x,y)=>Math.abs(y)>PI/2||Math.abs(x)>PI?null:[x,y]},
+me:{n:"Mercator",f:(l,p)=>Math.abs(p)>1.48443?null:[l,Math.log(Math.tan(PI/4+p/2))],i:(x,y)=>Math.abs(x)>PI||Math.abs(y)>PI?null:[x,2*Math.atan(Math.exp(y))-PI/2]},
+mi:{n:"Miller",f:(l,p)=>[l,1.25*Math.log(Math.tan(PI/4+.4*p))],i:(x,y)=>{if(Math.abs(x)>PI)return null;const p=2.5*Math.atan(Math.exp(.8*y))-.625*PI;return Math.abs(p)>PI/2+1e-9?null:[x,p]}},
+ce:{n:"Cylindrical Equal-Area (Lambert)",f:(l,p)=>[l,Math.sin(p)],i:(x,y)=>Math.abs(x)>PI||Math.abs(y)>1?null:[x,Math.asin(y)]},
+si:{n:"Sinusoidal",f:(l,p)=>[l*Math.cos(p),p],i:(x,y)=>{if(Math.abs(y)>PI/2)return null;const c=Math.cos(y);const l=c<1e-9?0:x/c;return Math.abs(l)>PI?null:[l,y]}},
+mo:{n:"Mollweide",f:(l,p)=>{let t=p;if(Math.abs(p)>PI/2-1e-9)t=Math.sign(p)*PI/2;else for(let k=0;k<30;k++){const d=2+2*Math.cos(2*t);if(Math.abs(d)<1e-9)break;t-=(2*t+Math.sin(2*t)-PI*Math.sin(p))/d}return[2*S2/PI*l*Math.cos(t),S2*Math.sin(t)]},
+ i:(x,y)=>{if(Math.abs(y)>S2)return null;const t=Math.asin(y/S2),c=Math.cos(t);const l=c<1e-9?0:PI*x/(2*S2*c);return Math.abs(l)>PI?null:[l,Math.asin(cl((2*t+Math.sin(2*t))/PI,-1,1))]}},
+ee:{n:"Equal Earth",f:(l,p)=>{const t=Math.asin(Math.sqrt(3)/2*Math.sin(p)),t2=t*t,t6=t2**3,t8=t6*t2;return[2*Math.sqrt(3)*l*Math.cos(t)/(3*(9*A4*t8+7*A3*t6+3*A2*t2+A1)),t*(A1+A2*t2+A3*t6+A4*t8)]},
+ i:(x,y)=>{let t=y/A1,f=0;for(let k=0;k<15;k++){f=A1*t+A2*t**3+A3*t**7+A4*t**9-y;t-=f/(A1+3*A2*t*t+7*A3*t**6+9*A4*t**8)}
+ if(Math.abs(t)>PI/3+1e-6||Math.abs(f)>1e-5)return null;const t2=t*t,t6=t2**3,t8=t6*t2,l=3*x*(9*A4*t8+7*A3*t6+3*A2*t2+A1)/(2*Math.sqrt(3)*Math.cos(t));return Math.abs(l)>PI?null:[l,Math.asin(cl(2*Math.sin(t)/Math.sqrt(3),-1,1))]}},
+or:{n:"Orthographic (globe)",...az(()=>1,r=>r>1?null:Math.asin(r),1,c=>c>=0)},
+st:{n:"Stereographic",...az(c=>2/(1+c),r=>{const c=2*Math.atan(r/2);return c>2*PI/3?null:c},3.4641,c=>c>-.5)},
+ae:{n:"Azimuthal Equidistant",...az(c=>{const a=Math.acos(cl(c,-1,1)),s=Math.sin(a);return s<1e-9?1:a/s},r=>r,PI,()=>true)},
+la:{n:"Lambert Azimuthal Equal-Area",...az(c=>Math.sqrt(2/(1+c)),r=>2*Math.asin(r/2),2,c=>c>-.9999)},
+gn:{n:"Gnomonic",...az(c=>1/c,r=>Math.atan(r),4.7,c=>c>.2)},
+ha:{n:"Hammer",f:(l,p)=>{const z=Math.sqrt(1+Math.cos(p)*Math.cos(l/2));return[2*S2*Math.cos(p)*Math.sin(l/2)/z,S2*Math.sin(p)/z]},i:(x,y)=>{const q=x*x/16+y*y/4;if(q>1)return null;const z=Math.sqrt(1-q);return[2*Math.atan2(z*x,2*(2*z*z-1)),Math.asin(cl(z*y,-1,1))]}},
+e4:{n:"Eckert IV",f:(l,p)=>{let t=p/2;if(Math.abs(p)>PI/2-1e-9)t=Math.sign(p)*PI/2;else for(let k=0;k<30;k++){const d=2*Math.cos(t)**2+2*Math.cos(t);if(Math.abs(d)<1e-9)break;t-=(t+Math.sin(t)*Math.cos(t)+2*Math.sin(t)-(2+PI/2)*Math.sin(p))/d}return[2/Math.sqrt(PI*(4+PI))*l*(1+Math.cos(t)),2*Math.sqrt(PI/(4+PI))*Math.sin(t)]},
+ i:(x,y)=>{const s=y/(2*Math.sqrt(PI/(4+PI)));if(Math.abs(s)>1)return null;const t=Math.asin(s),l=x*Math.sqrt(PI*(4+PI))/(2*(1+Math.cos(t)));return Math.abs(l)>PI?null:[l,Math.asin(cl((t+Math.sin(t)*Math.cos(t)+2*Math.sin(t))/(2+PI/2),-1,1))]}},
+ne:(()=>{const xf=p=>{const a=p*p,b=a*a;return .8707-.131979*a+b*(-.013791+b*(.003971*a-.001529*b))},yf=p=>{const a=p*p,b=a*a;return p*(1.007226+a*(.015085+b*(-.044475+.028874*a-.005916*b)))};return{n:"Natural Earth",f:(l,p)=>[l*xf(p),yf(p)],i:(x,y)=>{let p=y;for(let k=0;k<30;k++){const h=1e-6,d=(yf(p+h)-yf(p-h))/(2*h);p-=(yf(p)-y)/d}if(Math.abs(p)>PI/2+1e-6||Math.abs(yf(p)-y)>1e-6)return null;const l=x/xf(p);return Math.abs(l)>PI?null:[l,p]}}})(),
+ro:(()=>{const X=[1,.9986,.9954,.99,.9822,.973,.96,.9427,.9216,.8962,.8679,.835,.7986,.7597,.7186,.6732,.6213,.5722,.5322],Y=[0,.062,.124,.186,.248,.31,.372,.434,.4958,.5571,.6176,.6769,.7346,.7903,.8435,.8936,.9394,.9761,1];return{n:"Robinson",f:(l,p)=>{const a=Math.abs(p)/D/5,i=Math.min(Math.floor(a),17),t=a-i,xx=X[i]+t*(X[i+1]-X[i]),yy=Y[i]+t*(Y[i+1]-Y[i]);return[.8487*xx*l,Math.sign(p)*1.3523*yy]},i:(x,y)=>{const v=Math.abs(y)/1.3523;if(v>1)return null;let i=0;while(i<17&&Y[i+1]<v)i++;const t=(v-Y[i])/(Y[i+1]-Y[i]),xx=X[i]+t*(X[i+1]-X[i]),l=x/(.8487*xx);return Math.abs(l)>PI?null:[l,Math.sign(y)*(i+t)*5*D]}}})(),
+wt:(()=>{const c1=Math.acos(2/PI),f=(l,p)=>{const al=Math.acos(Math.cos(p)*Math.cos(l/2)),sc=al<1e-9?1:Math.sin(al)/al;return[(l*Math.cos(c1)+2*Math.cos(p)*Math.sin(l/2)/sc)/2,(p+Math.sin(p)/sc)/2]};return{n:"Winkel Tripel",f,i:(x,y)=>{let l=x/.8,p=y,h=1e-6;for(let k=0;k<40;k++){const q=f(l,p),ex=q[0]-x,ey=q[1]-y;if(Math.abs(ex)+Math.abs(ey)<1e-9)break;const a=f(l+h,p),b=f(l,p+h),j11=(a[0]-q[0])/h,j21=(a[1]-q[1])/h,j12=(b[0]-q[0])/h,j22=(b[1]-q[1])/h,de=j11*j22-j12*j21;if(Math.abs(de)<1e-12)return null;l-=(ex*j22-ey*j12)/de;p-=(ey*j11-ex*j21)/de}const q=f(l,p);if(Math.abs(q[0]-x)+Math.abs(q[1]-y)>1e-6||Math.abs(l)>PI+1e-6||Math.abs(p)>PI/2+1e-6)return null;return[l,p]}}})(),
+gs:{n:"Gall Stereographic",f:(l,p)=>[l/S2,(1+S2/2)*Math.tan(p/2)],i:(x,y)=>{const l=x*S2;return Math.abs(l)>PI||Math.abs(y)>1+S2/2?null:[l,2*Math.atan(y/(1+S2/2))]}},
+gp:{n:"Gall–Peters (Equal-Area 45°)",f:(l,p)=>[l*Math.SQRT1_2,Math.sin(p)*S2],i:(x,y)=>{const s=y/S2,l=x*S2;return Math.abs(s)>1||Math.abs(l)>PI?null:[l,Math.asin(s)]}},
+bh:{n:"Behrmann (Equal-Area 30°)",f:(l,p)=>[l*Math.cos(PI/6),Math.sin(p)/Math.cos(PI/6)],i:(x,y)=>{const s=y*Math.cos(PI/6),l=x/Math.cos(PI/6);return Math.abs(s)>1||Math.abs(l)>PI?null:[l,Math.asin(s)]}}
+};
+for(const s of["sp","tp"])for(const k in PR)$(s).add(new Option(PR[k].n,k));
+$("sp").value="eq";$("tp").value="ee";
+const cfg=p=>({P:PR[$(p+"p").value],l0:+$(p+"l").value*D,p0:+$(p+"q").value*D});
+function bbox(c,W,E,S,N){let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;for(let i=0;i<=180;i++)for(let j=0;j<=90;j++){const q=c.P.f(wrap((W+(E-W)*i/180)*D-c.l0),(S+(N-S)*j/90)*D,c.p0);if(!q||!isFinite(q[0]+q[1]))continue;x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1])}return{x0,x1,y0,y1}}
+let src=null;
+function setImg(img){const k=Math.min(1,4000/img.width),w=Math.round(img.width*k),h=Math.round(img.height*k),c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");x.drawImage(img,0,0,w,h);src={w,h,d:x.getImageData(0,0,w,h).data};run()}
+function loadFile(f){if(!f)return;$("st").textContent="Membaca gambar...";const r=new FileReader();r.onerror=()=>$("st").textContent="Gagal membaca file.";r.onload=()=>{const im=new Image();im.onerror=()=>$("st").textContent="Format gambar tidak didukung (pakai PNG/JPG/WebP).";im.onload=()=>setImg(im);im.src=r.result};r.readAsDataURL(f)}
+$("f").onchange=e=>loadFile(e.target.files[0]);
+addEventListener("paste",e=>{for(const it of e.clipboardData.items)if(it.type.startsWith("image/"))loadFile(it.getAsFile())});
+addEventListener("dragover",e=>e.preventDefault());addEventListener("drop",e=>{e.preventDefault();loadFile(e.dataTransfer.files[0])});
+$("demo").onclick=()=>{const c=document.createElement("canvas");c.width=1440;c.height=720;const x=c.getContext("2d");
+for(let i=0;i<24;i++){const g=x.createLinearGradient(0,0,0,720);g.addColorStop(0,`hsl(${i*15},70%,80%)`);g.addColorStop(.5,`hsl(${i*15},60%,55%)`);g.addColorStop(1,`hsl(${i*15},70%,30%)`);x.fillStyle=g;x.fillRect(i*60,0,60,720)}
+x.font="bold 18px sans-serif";x.fillStyle="#000";x.textAlign="center";
+for(let l=-180;l<=180;l+=15){const X=(l+180)*4;x.strokeStyle=l%30?"#fff6":"#000a";x.lineWidth=l%30?1:2;x.beginPath();x.moveTo(X,0);x.lineTo(X,720);x.stroke();if(l%30==0&&l>-180&&l<180)x.fillText(l+"°",X,360)}
+for(let p=-90;p<=90;p+=15){const Y=(90-p)*4;x.strokeStyle=p%30?"#fff6":"#000a";x.lineWidth=p%30?1:2;x.beginPath();x.moveTo(0,Y);x.lineTo(1440,Y);x.stroke();if(p%30==0&&p>-90&&p<90)x.fillText(p+"°",30,Y-4)}
+$("sp").value="eq";$("sl").value=0;setLim();const im=new Image();im.onload=()=>setImg(im);im.src=c.toDataURL()};
+function setLim(){const m=$("sp").value=="me"?85.0511:90;$("sW").value=-180;$("sE").value=180;$("sS").value=-m;$("sN").value=m}
+$("sp").addEventListener("change",setLim);
+function run(){if(!src){$("st").textContent="Pilih gambar dulu.";return}
+const t0=performance.now(),S=cfg("s"),T=cfg("t"),W=+$("sW").value,E=+$("sE").value,Sd=+$("sS").value,N=+$("sN").value;
+const sb=bbox(S,W,E,Sd,N),tb=bbox(T,-180,180,-90,90);
+const OW=cl(Math.round(+$("ow").value)||1000,200,2000),OH=Math.max(50,Math.min(2000,Math.round(OW*(tb.y1-tb.y0)/(tb.x1-tb.x0))));
+const cv=$("cv");cv.width=OW;cv.height=OH;const ctx=cv.getContext("2d"),out=ctx.createImageData(OW,OH),o=out.data,{w:sw,h:sh,d}=src;
+const dx=tb.x1-tb.x0,dy=tb.y1-tb.y0,sx=sb.x1-sb.x0,sy=sb.y1-sb.y0;
+for(let j=0;j<OH;j++)for(let i=0;i<OW;i++){
+const g=T.P.i(tb.x0+(i+.5)/OW*dx,tb.y1-(j+.5)/OH*dy,T.p0);if(!g)continue;
+const lon=wrap(g[0]+T.l0),lat=g[1],ld=lon/D;if(lat/D<Sd-1e-9||lat/D>N+1e-9||w360(ld-W)>E-W)continue;
+const q=S.P.f(wrap(lon-S.l0),lat,S.p0);if(!q)continue;
+const u=(q[0]-sb.x0)/sx*sw-.5,v=(sb.y1-q[1])/sy*sh-.5;if(u<-.5||v<-.5||u>sw-.5||v>sh-.5)continue;
+const u0=Math.floor(u),v0=Math.floor(v),fu=u-u0,fv=v-v0,a=cl(u0,0,sw-1),b=cl(u0+1,0,sw-1),c=cl(v0,0,sh-1),e=cl(v0+1,0,sh-1),k=(j*OW+i)*4;
+for(let m=0;m<4;m++)o[k+m]=(d[(c*sw+a)*4+m]*(1-fu)+d[(c*sw+b)*4+m]*fu)*(1-fv)+(d[(e*sw+a)*4+m]*(1-fu)+d[(e*sw+b)*4+m]*fu)*fv}
+ctx.putImageData(out,0,0);
+if($("gr").checked){ctx.strokeStyle=$("gc").value;ctx.lineWidth=Math.max(1,OW/1000);const G=+$("gs").value;
+const px=q=>[(q[0]-tb.x0)/dx*OW,(tb.y1-q[1])/dy*OH];
+const line=(fn)=>{ctx.beginPath();let on=false,pp=null;for(let k=0;k<=360;k++){const q=fn(k/360);const r=q&&T.P.f(wrap(q[0]*D-T.l0),q[1]*D,T.p0);if(!r){on=false;continue}const p=px(r);if(!on||Math.hypot(p[0]-pp[0],p[1]-pp[1])>OW/8){ctx.moveTo(p[0],p[1]);on=true}else ctx.lineTo(p[0],p[1]);pp=p}ctx.stroke()};
+for(let l=-180;l<=180;l+=G)line(t=>[l,-90+180*t]);for(let p=-90+G;p<90;p+=G)line(t=>[-180+360*t,p])}
+$("st").textContent=`Selesai: ${OW}×${OH}px, ${Math.round(performance.now()-t0)} ms`}
+$("go").onclick=run;
+$("dl").onclick=()=>{if(!src){$("st").textContent="Belum ada hasil untuk diunduh.";return}const im=$("im");im.src=$("cv").toDataURL("image/png");im.style.display="inline-block";$("cv").toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="peta-"+$("tp").value+".png";document.body.appendChild(a);a.click();a.remove()})};
+for(const id of["tp","tl","tq","gr","gc","gs","ow","sp","sl","sq","sW","sE","sS","sN"])$(id).addEventListener("change",()=>src&&run());
+</script></body></html>
